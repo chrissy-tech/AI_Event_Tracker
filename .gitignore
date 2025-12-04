@@ -1,4 +1,12 @@
 venv/
 .venv/
-
+.env
 .idea/
+
+events.db
+__pycache__/
+z_categorie_filter.txt
+z_presentation.txt
+z_prompts.txt
+z_requirements.txt
+test.py

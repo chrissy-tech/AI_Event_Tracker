@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Tracker - Bitterfeld-Wolfen & Region</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            text-align: center;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .info-box {
+            background: #e8f4f8;
+            border-left: 4px solid #4CAF50;
+            padding: 15px;
+            margin-bottom: 25px;
+            border-radius: 5px;
+        }
+
+        .info-box p {
+            margin: 0;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .crawl-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+
+        button {
+            padding: 12px 24px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .crawl-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .crawl-btn:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+
+        .crawl-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #crawl-status {
+            display: inline-block;
+            margin-left: 15px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        hr {
+            border: none;
+            border-top: 2px solid #e0e0e0;
+            margin: 30px 0;
+        }
+
+        .search-section {
+            margin-top: 30px;
+        }
+
+        .search-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        #event-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        #message {
+            flex: 1;
+            padding: 12px 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        #message:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .search-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+        }
+
+        .search-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .response-section h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        #response {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            white-space: pre-wrap;
+            line-height: 1.8;
+            min-height: 100px;
+            color: #333;
+        }
+
+        .loading {
+            color: #667eea;
+            font-style: italic;
+        }
+
+        .error {
+            color: #d32f2f;
+            font-weight: 600;
+        }
+
+        .success {
+            color: #4CAF50;
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 2em;
+            }
+
+            #event-form {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 Event Tracker</h1>
+        <p class="subtitle">Bitterfeld-Wolfen & Region</p>
+
+        <div class="info-box">
+            <p>
+                <strong>ℹ️ Auto-Load:</strong> Events are automatically loaded when the application starts.
+                Use the button below only if you want to refresh the event database with the latest information.
+            </p>
+        </div>
+
+        <div class="crawl-section">
+            <h2 style="margin-bottom: 15px;">📥 Event Database</h2>
+            <button class="crawl-btn" onclick="crawlEvents()" id="crawl-button">
+                🔄 Refresh Events (Crawl)
+            </button>
+            <span id="crawl-status"></span>
+        </div>
+
+        <hr>
+
+        <div class="search-section">
+            <h2>🔍 Search Events</h2>
+            <form id="event-form">
+                <input
+                    type="text"
+                    id="message"
+                    placeholder="e.g., Search events on 30.11.2025 in Bitterfeld"
+                    required
+                >
+                <button type="submit" class="search-btn">Search</button>
+            </form>
+        </div>
+
+        <div class="response-section">
+            <h2>💬 Results:</h2>
+            <div id="response">Ready to search! Enter your query above.</div>
+        </div>
+    </div>
+
+    <script>
+        async function crawlEvents() {
+            const button = document.getElementById("crawl-button");
+            const statusEl = document.getElementById("crawl-status");
+
+            button.disabled = true;
+            statusEl.innerHTML = '<span class="loading">⏳ Loading events... This may take a few minutes.</span>';
+
+            try {
+                const response = await fetch("/crawl");
+                const data = await response.json();
+
+                statusEl.innerHTML = `<span class="success">✅ ${data.message} - ${data.events_found} events found</span>`;
+
+                if (data.errors && data.errors.length > 0) {
+                    statusEl.innerHTML += `<br><span class="error">⚠️ Some URLs had errors</span>`;
+                }
+            } catch (error) {
+                statusEl.innerHTML = '<span class="error">❌ Error loading events</span>';
+                console.error("Crawl error:", error);
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        document.getElementById("event-form").addEventListener("submit", async function (e) {
+            e.preventDefault();
+
+            const message = document.getElementById("message").value;
+            const responseEl = document.getElementById("response");
+
+            responseEl.innerHTML = '<span class="loading">⏳ Searching...</span>';
+
+            try {
+                const response = await fetch("/api", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({ message })
+                });
+
+                const data = await response.json();
+                responseEl.innerText = data.reply;
+            } catch (error) {
+                responseEl.innerHTML = '<span class="error">❌ Error during search</span>';
+                console.error("Search error:", error);
+            }
+        });
+
+        // Check status on page load
+        window.addEventListener('load', function() {
+            const statusEl = document.getElementById("crawl-status");
+            statusEl.innerHTML = '<span class="success">✅ Events loaded automatically on startup</span>';
+        });
+    </script>
+</body>
+</html>
