@@ -1,149 +1,125 @@
-import asyncio
 import logging
-import re
-from typing import List
-
-from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
-from crawl4ai.content_scraping_strategy import LXMLWebScrapingStrategy
 
 logger = logging.getLogger(__name__)
 
 
-async def crawl_site(url: str) -> str:
-    """
-    Crawl a site 2 levels deep and return combined text content
-    for pages that pass the URL filter.
-    Returns empty string on failure or if nothing relevant found.
-    """
+async def crawl_website(url: str) -> str:
+	"""
+	Crawl a website with deep crawling (2 levels).
 
-    # Minimal, safe config - avoid unsupported args
-    config = CrawlerRunConfig(
-        deep_crawl_strategy=BFSDeepCrawlStrategy(
-            max_depth=2,
-            include_external=False,
-        ),
-        scraping_strategy=LXMLWebScrapingStrategy(),
-        verbose=False,
-    )
+	Crawls the main event page and linked event detail pages.
 
-    try:
-        logger.info(f"Starting deep crawling (2 levels): {url}")
+	Args:
+		url: Starting URL (should be an events/calendar page)
 
-        async with AsyncWebCrawler() as crawler:
-            results = await crawler.arun(url, config=config)
+	Returns:
+		Combined HTML content from all crawled pages
+	"""
+	try:
+		logger.info(f"Crawling {url} with deep strategy...")
 
-        if not results:
-            logger.warning(f"No results returned for {url}")
-            return ""
+		# Configure browser
+		browser_config = BrowserConfig(
+			headless=True,
+			java_script_enabled=True
+		)
 
-        # results may be a list of page results
-        pages_content: List[str] = []
-        filtered_count = 0
-        total_pages = len(results) if isinstance(results, list) else 1
-        logger.info(f"Processing {total_pages} crawled pages...")
+		# Configure deep crawling
+		run_config = CrawlerRunConfig(
+			deep_crawl_strategy=BFSDeepCrawlStrategy(
+				max_depth=2,  # Main page + linked pages
+				include_external=False,  # Stay on same domain
+				max_pages=30  # Limit to prevent crawling entire site
+			),
+			word_count_threshold=10,
+			exclude_external_links=True,
+			remove_overlay_elements=True
+		)
 
-        # iterate results (robust for both dict-like and attr-like result objects)
-        iterable = results if isinstance(results, list) else [results]
+		async with AsyncWebCrawler() as crawler:
+			results = await crawler.arun(
+				url=url,
+				browser_config=browser_config,
+				crawler_run_config=run_config
+			)
 
-        for idx, result in enumerate(iterable):
-            try:
-                # Get URL from result (try attribute then dict keys)
-                page_url = (
-                    getattr(result, "url", None)
-                    or result.get("url") if isinstance(result, dict) else None
-                    or f"page_{idx}"
-                )
+			# Handle both single result and list of results
+			if not results:
+				logger.warning(f"No results from {url}")
+				return ""
 
-                # Determine content: try common fields used by crawl4ai
-                content = None
-                if hasattr(result, "extracted_content"):
-                    content = getattr(result, "extracted_content")
-                elif hasattr(result, "content"):
-                    content = getattr(result, "content")
-                elif isinstance(result, dict):
-                    # check common dict keys
-                    for key in ("extracted_content", "content", "markdown", "text"):
-                        if key in result and result[key]:
-                            content = result[key]
-                            break
+			# If results is a list (multiple pages crawled)
+			if isinstance(results, list):
+				all_content = []
 
-                if not content:
-                    logger.debug(f"No textual content for {page_url}, skipping")
-                    filtered_count += 1
-                    continue
+				for idx, result in enumerate(results):
+					if result and hasattr(result,
+										  'success') and result.success:
+						if result.html:
+							# Filter out non-event pages
+							page_url = result.url if hasattr(result,
+															 'url') else url
 
-                # Decide whether to include the page
-                if not _should_include_page(page_url):
-                    logger.debug(f"Filtered out non-event page: {page_url}")
-                    filtered_count += 1
-                    continue
+							if should_include_page(page_url):
+								all_content.append(result.html)
+								logger.info(
+									f"✓ Included page {idx + 1}: {len(result.html)} chars")
+							else:
+								logger.info(
+									f"✗ Filtered page: {page_url}")
 
-                # Append a small page marker + content (trim very long pages)
-                trimmed = content.strip()
-                if len(trimmed) == 0:
-                    filtered_count += 1
-                    continue
+				if all_content:
+					combined = "\n\n<!-- PAGE SEPARATOR -->\n\n".join(
+						all_content)
+					logger.info(
+						f"✓ Combined {len(all_content)} pages → {len(combined)} total chars")
+					return combined
+				else:
+					logger.warning(
+						"No relevant pages found after filtering")
+					return ""
 
-                page_marker = "MAIN PAGE" if idx == 0 else f"SUBPAGE {idx}"
-                pages_content.append(f"=== {page_marker}: {page_url} ===\n{trimmed}")
+			# Single result (fallback)
+			elif hasattr(results, 'success') and results.success:
+				if results.html:
+					logger.info(
+						f"✓ Single page: {len(results.html)} chars")
+					return results.html
 
-            except Exception as e:
-                logger.warning(f"Skipping result #{idx} due to error: {e}")
-                filtered_count += 1
-                continue
+			logger.warning(f"Crawl failed for {url}")
+			return ""
 
-        logger.info(f"Kept {len(pages_content)} pages, filtered out {filtered_count} pages")
-
-        if pages_content:
-            combined = "\n\n".join(pages_content)
-            logger.info(f"Total combined content length: {len(combined)}")
-            return combined
-
-        logger.warning(f"No relevant event content found for {url}")
-        return ""
-
-    except Exception as e:
-        logger.error(f"Error crawling {url}: {e}", exc_info=True)
-        return ""
+	except Exception as e:
+		logger.error(f"Crawl error for {url}: {e}", exc_info=True)
+		return ""
 
 
-def _should_include_page(url: str) -> bool:
-    """
-    Return True if page URL looks like an event page, False if it should be excluded.
-    This is a whitelist-ish approach: include pages that contain typical event path segments,
-    but also explicitly exclude obvious admin/contact pages.
-    """
+def should_include_page(url: str) -> bool:
+	"""
+	Filter to include only event-related pages.
 
-    if not url:
-        return False
+	Excludes admin, contact, privacy pages etc.
 
-    url = url.lower()
+	Args:
+		url: URL to check
 
-    # Explicit deny list (skip pages that are definitely not event related)
-    denied_patterns = [
-        r"/impressum", r"/kontakt", r"/datenschutz", r"/agb", r"/newsletter",
-        r"/login", r"/suche", r"/search", r"/vermietung", r"/grundstueck",
-        r"/ausschreibung", r"/verwaltung", r"/rathaus", r"/satzung", r"/formulare",
-        r"/buergerservice", r"/kontaktformular", r"/kontakt-"
-    ]
+	Returns:
+		True if page should be included
+	"""
+	# Exclude these patterns
+	excluded = [
+		"impressum", "kontakt", "datenschutz", "agb",
+		"newsletter", "login", "suche", "search",
+		"vermietung", "grundstueck", "ausschreibung",
+		"verwaltung", "rathaus", "satzung", "formulare"
+	]
 
-    for p in denied_patterns:
-        if re.search(p, url):
-            return False
+	url_lower = url.lower()
 
-    # Whitelist signals: URLs that likely contain event pages.
-    # This is permissive
-    allowed_signals = [
-        r"/veranstalt",  # catches /veranstaltungen, /veranstaltung, etc.
-        r"/event",       # english /event or /events
-        r"/konzert", r"/markt", r"/messe", r"/theater", r"/festival"
-    ]
+	for pattern in excluded:
+		if pattern in url_lower:
+			return False
 
-    # If we detect an allowed signal, accept it.
-    for s in allowed_signals:
-        if re.search(s, url):
-            return True
-
-    # If no explicit allowed signal is present, reject (prevents crawling whole site)
-    return False
+	return True

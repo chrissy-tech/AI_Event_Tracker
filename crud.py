@@ -1,41 +1,46 @@
-from database import SessionLocal, EventDB
+"""
+Database CRUD operations for events.
+Handles saving, loading, and deleting events.
+"""
 import logging
+from database import SessionLocal, EventDB
 
 logger = logging.getLogger(__name__)
 
 
-def save_events(events):
+def save_events(events: list) -> None:
 	"""
-	Saves events to database without creating duplicates.
+	Save events to database, avoiding duplicates.
 
-	Checks for existing events based on title and source URL
-	before inserting new records.
+	Checks for existing events based on title and source URL.
 
 	Args:
-		events: List of event dictionaries containing title, date,
-				location, and url keys
-
-	Raises:
-		Exception: If database operation fails
+		events: List of event dictionaries with keys:
+				- title (required)
+				- date (optional)
+				- location (optional)
+				- url (optional)
 	"""
 	session = SessionLocal()
+
 	try:
 		saved_count = 0
 		duplicate_count = 0
 
-		for evt in events:
+		for event_data in events:
 			# Check if event already exists
 			existing = session.query(EventDB).filter_by(
-				title=evt["title"],
-				source_url=evt.get("url", "")
+				title=event_data["title"],
+				source_url=event_data.get("url", "")
 			).first()
 
 			if not existing:
+				# Create new event
 				new_event = EventDB(
-					title=evt["title"],
-					date=evt.get("date"),
-					location=evt.get("location", ""),
-					source_url=evt.get("url", "")
+					title=event_data["title"],
+					date=event_data.get("date"),
+					location=event_data.get("location", "unbekannt"),
+					source_url=event_data.get("url", "")
 				)
 				session.add(new_event)
 				saved_count += 1
@@ -44,42 +49,47 @@ def save_events(events):
 
 		session.commit()
 		logger.info(
-			f"Saved {saved_count} new events, skipped {duplicate_count} duplicates")
+			f"✓ Saved {saved_count} events, skipped {duplicate_count} duplicates")
 
 	except Exception as e:
 		session.rollback()
-		logger.error(f"Error saving events: {e}")
+		logger.error(f"Error saving events: {e}", exc_info=True)
 		raise
+
 	finally:
 		session.close()
 
 
-def load_events():
+def load_events() -> list:
 	"""
-	Loads all events from database sorted by date.
+	Load all events from database, ordered by date.
 
 	Returns:
-		list: List of EventDB objects ordered by date (ascending)
+		List of EventDB objects (SQLAlchemy ORM objects)
 	"""
 	session = SessionLocal()
+
 	try:
 		events = session.query(EventDB).order_by(EventDB.date).all()
 		logger.info(f"Loaded {len(events)} events from database")
 		return events
+
 	finally:
 		session.close()
 
 
-def clear_events():
+def clear_events() -> None:
 	"""
-	Deletes all events from database.
+	Delete all events from database.
 
-	Warning: This operation cannot be undone.
+	Warning: This cannot be undone!
 	"""
 	session = SessionLocal()
+
 	try:
 		deleted_count = session.query(EventDB).delete()
 		session.commit()
-		logger.info(f"Deleted {deleted_count} events from database")
+		logger.info(f"✓ Deleted {deleted_count} events from database")
+
 	finally:
 		session.close()

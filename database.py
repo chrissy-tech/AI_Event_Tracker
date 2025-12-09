@@ -1,3 +1,7 @@
+"""
+Database models and configuration.
+Defines the EventDB table structure.
+"""
 from sqlalchemy import create_engine, Column, String, Integer, \
 	DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -8,29 +12,29 @@ engine = create_engine("sqlite:///events.db", echo=False)
 # Create session factory for database operations
 SessionLocal = sessionmaker(bind=engine)
 
-# Create declarative base class for ORM models
+# Create declarative base for ORM models
 Base = declarative_base()
 
 
 class EventDB(Base):
 	"""
-	Database model for storing event information.
+	Event database model.
 
-	Attributes:
-		id: Primary key, auto-incrementing integer
-		title: Event name/title (required)
-		date: Event date as datetime object (optional)
-		location: Event location/venue (optional)
-		source_url: Original URL where event was found (optional)
+	Stores event information with title, date, location, and source URL.
 	"""
 	__tablename__ = "events"
 
 	id = Column(Integer, primary_key=True, index=True)
 	title = Column(String, nullable=False)
-	date = Column(DateTime)
-	location = Column(String)
-	source_url = Column(String)
+	date = Column(DateTime, nullable=True)
+	location = Column(String, nullable=True)
+	source_url = Column(String, nullable=True)
 
 
-# Create all tables in the database
-Base.metadata.create_all(bind=engine)
+def init_db():
+	"""
+	Initialize database by creating all tables.
+
+	Called once at application startup.
+	"""
+	Base.metadata.create_all(bind=engine)
