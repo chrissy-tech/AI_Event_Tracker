@@ -1,0 +1,11 @@
+favicon icon:
+oder eine Datei unter /static/favicon.ico ablegen und in FastAPI so serven:
+
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+Dann einen static/favicon.ico reinlegen.
+
+-----

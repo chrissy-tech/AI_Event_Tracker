@@ -11,10 +11,7 @@ logger = logging.getLogger(__name__)
 def save_events(events: list) -> None:
 	"""
 	Save events to database, avoiding duplicates.
-
 	Checks for existing events based on title and source URL.
-
-	Args:
 		events: List of event dictionaries with keys:
 				- title (required)
 				- date (optional)
@@ -63,8 +60,6 @@ def save_events(events: list) -> None:
 def load_events() -> list:
 	"""
 	Load all events from database, ordered by date.
-
-	Returns:
 		List of EventDB objects (SQLAlchemy ORM objects)
 	"""
 	session = SessionLocal()
@@ -81,7 +76,6 @@ def load_events() -> list:
 def clear_events() -> None:
 	"""
 	Delete all events from database.
-
 	Warning: This cannot be undone!
 	"""
 	session = SessionLocal()
