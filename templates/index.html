@@ -32,12 +32,15 @@
                     <input
                         type="text"
                         id="user-query"
+                        list="query-suggestions"
                         placeholder="e.g., What is happening this weekend?"
                         required
+                        autocomplete="off"
                     >
+                    <datalist id="query-suggestions"></datalist>
+
                     <button type="submit" class="search-btn">Ask AI</button>
                 </div>
-
             </form>
         </section>
 
@@ -50,6 +53,32 @@
     </div>
 
     <script>
+        // SMART LOGIC: Dynamic Autocomplete
+        const suggestions = [
+            "Konzert", "Flohmarkt", "Wochenende", "Bitterfeld",
+            "Wolfen", "Halle", "Leipzig", "Kinderfreundlich",
+            "Kostenlos", "nächstes Wochenende", "heute", "morgen",
+            "Dessau", "Pouch", "Sportevent", "Ausstellung"
+        ];
+
+        const input = document.getElementById('user-query');
+        const dataList = document.getElementById('query-suggestions');
+
+        input.addEventListener('input', (e) => {
+            const value = input.value.toLowerCase();
+            // Leere die Liste zuerst
+            dataList.innerHTML = '';
+
+            // Zeige alle Vorschläge, wenn das Feld noch leer ist
+            const targetSet = value.length < 2 ? suggestions : suggestions.filter(s => s.toLowerCase().includes(value));
+
+            targetSet.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item;
+                dataList.appendChild(option);
+    });
+});
+
         /**
          * Trigger the Python Crawler to scrape new events.
          */
@@ -61,6 +90,7 @@
             status.innerHTML = '<span class="loading-text">Crawling websites...</span>';
 
             try {
+                // Hinweis: In deiner app.py sollte eine Route @app.get("/crawl") existieren
                 const response = await fetch("/crawl");
                 const data = await response.json();
                 status.innerHTML = `✅ Successfully found ${data.events_found} events!`;
@@ -78,26 +108,19 @@
         document.getElementById("search-form").addEventListener("submit", async (event) => {
             event.preventDefault();
 
-            // 1. Grab values from UI
             const queryText = document.getElementById("user-query").value;
             const responseBox = document.getElementById("ai-response-box");
 
-            // 2. Visual Loading state
             responseBox.innerHTML = '<span class="loading-text">AI is thinking...</span>';
 
             try {
-                // 3. Send POST request to /api
                 const response = await fetch("/api", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        message: queryText
-                    })
+                    body: JSON.stringify({ message: queryText })
                 });
 
                 const data = await response.json();
-
-                // 4. Update UI with AI answer
                 responseBox.innerText = data.reply;
 
             } catch (error) {

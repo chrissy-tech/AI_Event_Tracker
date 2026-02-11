@@ -10,5 +10,11 @@ z_presentation.txt
 z_prompts.txt
 z_requirements.txt
 test.py
+Änderungen.py
+
+crawl_cache.db
 
 .DS_Store
+
+
+*.log

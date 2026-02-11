@@ -3,6 +3,7 @@ Event Tracker FastAPI Application - Live Search Edition
 """
 import logging
 import os
+import json
 import re
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Request
@@ -11,16 +12,18 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import OpenAI
-from database import init_db
+from fastapi.staticfiles import StaticFiles
+
+# Eigene Module
+from database import init_db, get_smart_cache, update_url_cache
 from crawl_webpage import crawl_website
 from urls import START_URLS
-from fastapi.staticfiles import StaticFiles
 
 # ==================== SETUP ====================
 load_dotenv()
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+	level=logging.INFO,
+	format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger("app")
 
@@ -32,194 +35,230 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # ==================== MODELS ====================
 class EventQuery(BaseModel):
-    """User search query with optional filters."""
-    message: str
+	"""User search query with optional filters."""
+	message: str
 
 
 # ==================== STARTUP ====================
 @app.on_event("startup")
 async def startup_event():
-    """Initialize system on startup."""
-    logger.info("🚀 Starting Live Event Tracker...")
-    init_db()  # Initialize database for persistence if needed
+	"""Initialize system on startup."""
+	logger.info("🚀 Starting Live Event Tracker...")
+	init_db()
+
+
+# ==================== SMART LOGIC ====================
+async def get_events_logic(url: str, user_query: str):
+	"""
+	Smart Trigger: Prüft erst die Datenbank, ob die URL kürzlich gecrawlt wurde.
+	Falls nicht, wird ein Live-Crawl gestartet.
+	"""
+	# 1. Prüfe DB (Cache für 1 Stunde gültig)
+	cached_data = get_smart_cache(url, max_age_hours=1)
+
+	if cached_data:
+		logger.info(f"✅ DB HIT: Daten für {url} aus Cache geladen.")
+		return cached_data
+
+	# 2. FALLBACK: Live Crawl
+	logger.info(f"🌐 LIVE CRAWL: Starte frische Extraktion für {url}")
+	live_results = await crawl_website(url, user_query)
+
+	# 3. UPDATE: In Datenbank speichern für nächste Anfrage
+	if live_results:
+		update_url_cache(url, live_results)
+
+	return live_results
 
 
 # ==================== ROUTES ====================
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    """Show the search interface."""
-    return templates.TemplateResponse("index.html",
-                                      {"request": request})
+	"""Show the search interface."""
+	return templates.TemplateResponse("index.html",
+									  {"request": request})
 
 
 @app.post("/api")
 async def search_events(query: EventQuery):
-    """
-    Perform a live crawl and AI extraction based on the user's message.
-    """
-    all_found_events = []
+	"""
+	Perform a search using Smart Trigger (DB or Crawl).
+	"""
+	all_found_events = []
 
-    # 1. Loop through all URLs to find events
-    for current_url in START_URLS:
-        try:
-            logger.info(f"Searching on: {current_url}")
-            # The crawler returns a list of dictionaries via LLM extraction
-            crawl_results = await crawl_website(current_url,
-                                                query.message)
+	# 1. Daten beschaffen (DB oder Live)
+	for current_url in START_URLS:
+		try:
+			crawl_results = await get_events_logic(current_url,
+												   query.message)
+			if crawl_results:
+				all_found_events.extend(crawl_results)
+		except Exception as error:
+			logger.error(f"Error processing {current_url}: {error}")
 
-            if crawl_results:
-                all_found_events.extend(crawl_results)
-        except Exception as error:
-            logger.error(
-                f"Error during crawl of {current_url}: {error}")
+	logger.info(
+		f"Data retrieval finished. Total events to filter: {len(all_found_events)}")
 
-    logger.info(
-        f"Crawl finished. Found {len(all_found_events)} potential events.")
+	# Debug-Speicherung
+	with open("debug_raw_events.json", "w", encoding="utf-8") as f:
+		json.dump(all_found_events, f, ensure_ascii=False, indent=4)
 
-    # 2. Filter logic
-    matching_events = all_found_events
+	# 2. Python Filtering (Date & Location)
+	matching_events = filter_by_date(all_found_events, query.message)
+	matching_events = filter_by_location(matching_events,
+										 query.message)
 
-    # 3. Apply date and location filters
-    matching_events = filter_by_date(matching_events, query.message)
-    matching_events = filter_by_location(matching_events,
-                                         query.message)
+	logger.info(
+		f"After filtering: {len(matching_events)} events remaining.")
 
-    # 4. Handle empty results
-    if not matching_events:
-        return {
-            "reply": "I'm sorry, I couldn't find any events matching your request.",
-            "total_events": 0
-        }
+	# 3. Handle empty results
+	if not matching_events:
+		return {
+			"reply": "I'm sorry, I couldn't find any events matching your request in the specified timeframe or location.",
+			"total_events": len(all_found_events),
+			"filtered_to": 0
+		}
 
-    # 5. Build AI summary
-    # We only send the top 15 events to the AI to stay within token limits
-    context_events = matching_events[:15]
-    formatted_text = format_events_for_ai(context_events)
+	# 4. Build AI summary
+	context_events = matching_events[:15]
+	formatted_text = format_events_for_ai(context_events)
 
-    ai_response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                            "You are a professional helpful event assistant. "
-                            "Use the following format for each event:\n"
-                			"Titel: [Name]\n"
-                			"Datum: [Date]\n"
-                			"Location: [Location]\n\n"
-                			"Only mention 'Free' or 'Kids' if specifically asked, "
-                			"or if it is a key highlight. Otherwise, stay neutral. "
-                            "Summarize the events found in a friendly way. "
-                            "STRICTLY answer in the same language as the user's last question. "
-                            "If the user asks in English, your entire summary must be in English, "
-                            "even if the source data is in German. "
-                            "If the user asks in German, answer in German."
-                )
-            },
-            {
-                "role": "user",
-                "content": f"Query: {query.message}\n\nEvents:\n{formatted_text}"
-            }
-        ]
-    )
+	ai_response = client.chat.completions.create(
+		model="gpt-4o-mini",
+		messages=[
+			{
+				"role": "system",
+				"content": (
+					"You are a professional event assistant. "
+					"Present the provided events clearly using this format:\n\n"
+					"Titel: [Name]\n"
+					"Datum: [Date]\n"
+					"Location: [Location]\n"
+					"Info: [Short Summary]\n\n"
+					"STRICTLY answer in the same language as the user's query."
+				)
+			},
+			{
+				"role": "user",
+				"content": f"User Request: {query.message}\n\nEvents:\n{formatted_text}"
+			}
+		]
+	)
 
-    return {
-        "reply": ai_response.choices[0].message.content,
-        "total_events": len(all_found_events),
-        "filtered_to": len(matching_events)
-    }
+	return {
+		"reply": ai_response.choices[0].message.content,
+		"total_events": len(all_found_events),
+		"filtered_to": len(matching_events)
+	}
 
 
 # ==================== HELPER FUNCTIONS ====================
 
 def filter_by_date(event_list: list, user_search_query: str) -> list:
-    query = user_search_query.lower()
-    today = datetime.now().date()
+	query = user_search_query.lower()
+	today = datetime.now().date()
 
-    def to_date(date_string):
-        for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(date_string, fmt).date()
-            except:
-                continue
-        return None
+	def to_date(date_string):
+		if not date_string: return None
+		for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
+			try:
+				return datetime.strptime(date_string, fmt).date()
+			except:
+				continue
+		return None
 
-    mon_next = (today.replace(day=28) + timedelta(4)).replace(day=1)
-    mon_after = (mon_next + timedelta(32)).replace(day=1)
+	# ---PRÜFUNG AUF KONKRETES DATUM (z.B. 14.02.2026) ---
+	# Dieser Block fängt exakte Daten ab, bevor die Keywords gescannt werden
+	date_match = re.search(r'(\d{2}\.\d{2}\.\d{4})',
+						   user_search_query)
+	if date_match:
+		try:
+			target_date = datetime.strptime(date_match.group(1),
+											"%d.%m.%Y").date()
+			# Filtert alles raus, was nicht exakt an diesem Tag ist
+			return [e for e in event_list if
+					to_date(e.get("date")) == target_date]
+		except:
+			pass  # Fall
 
-    ranges = {
-        ("heute", "today"): (today, today),
-        ("morgen", "tomorrow"):
-            (today + timedelta(1), today + timedelta(1)),
-        ("übermorgen", "after tomorrow"):
-            (today + timedelta(2), today + timedelta(2)),
-        ("diese woche", "this week"):
-            (today, today + timedelta(6 - today.weekday())),
-        ("nächste woche", "next week"):
-            (today + timedelta(7 - today.weekday()),
-             today + timedelta(13 - today.weekday())),
-        ("wochenende", "weekend"):
-            (today + timedelta(5 - today.weekday()),
-             today + timedelta(6 - today.weekday())),
-        ("nächstes wochenende", "next weekend"):
-            (today + timedelta(12 - today.weekday()),
-             today + timedelta(13 - today.weekday())),
-        ("diesen monat", "this month"):
-            (today, mon_next - timedelta(1)),
-        ("nächsten monat", "next month"):
-            (mon_next, mon_after - timedelta(1))
-    }
+	# --- KEYWORD LOGIC ---
+	# Dynamische Zeiträume berechnen
+	mon_next = (today.replace(day=28) + timedelta(4)).replace(day=1)
 
-    for words, (start, end) in ranges.items():
-        if any(word in query for word in words):
-            return [item for item in event_list if start <=
-                    (to_date(item.get("date", "")) or today) <= end]
+	# Weekend Logic
+	days_to_sat = (5 - today.weekday())
+	this_sat = today + timedelta(days=days_to_sat)
+	this_sun = this_sat + timedelta(days=1)
 
-    return event_list
+	next_sat = this_sat + timedelta(days=7)
+	next_sun = next_sat + timedelta(days=1)
+
+	ranges = {
+		("heute", "today"): (today, today),
+		("morgen", "tomorrow"): (today + timedelta(1),
+								 today + timedelta(1)),
+		("wochenende", "weekend", "dieses wochenende"): (this_sat,
+														 this_sun),
+		("nächstes wochenende", "next weekend"): (next_sat, next_sun),
+		("diese woche", "this week"): (today, today + timedelta(
+			days=(6 - today.weekday()))),
+		("nächste woche", "next week"): (
+			today + timedelta(days=(7 - today.weekday())),
+			today + timedelta(days=(13 - today.weekday()))),
+		("dieses monat", "this month"): (today.replace(day=1), mon_next),
+
+		# --- Monate (Beispielhaft für das Frühjahr 2026) ---
+		("februar", "february"): (datetime(2026, 2, 1).date(),
+								  datetime(2026, 2, 28).date()),
+		("märz", "march"): (datetime(2026, 3, 1).date(),
+							datetime(2026, 3, 31).date()),
+		("april", "april"): (datetime(2026, 4, 1).date(),
+							 datetime(2026, 4, 30).date()),
+		("mai", "may"): (datetime(2026, 5, 1).date(),
+						 datetime(2026, 5, 31).date())
+	}
+
+
+	# Prüfen, ob ein Zeitraum-Keyword in der Query vorkommt
+	for words, (start, end) in ranges.items():
+		if any(word in query for word in words):
+			filtered = []
+			for item in event_list:
+				ev_date = to_date(item.get("date", ""))
+				if ev_date and start <= ev_date <= end:
+					filtered.append(item)
+			return filtered
+
+	return event_list
 
 
 def filter_by_location(event_list: list, query: str) -> list:
-    """Filters events by mentioned cities in the query."""
-    query = query.lower()
-    cities = ["bitterfeld", "wolfen", "leipzig", "halle",
-              "dessau", "pouch"]
+	if not event_list: return []
+	query = query.lower()
+	cities = ["bitterfeld", "wolfen", "leipzig", "halle", "dessau",
+			  "pouch"]
+	found_cities = [c for c in cities if c in query]
 
-    found_cities = [city_name for city_name in cities if city_name in query]
+	if not found_cities:
+		return event_list
 
-    if not found_cities:
-        return event_list
-
-    return [item for item in event_list if any(city_name in
-            item.get("location", "").lower() for city_name in found_cities)]
+	return [item for item in event_list if any(
+		c in item.get("location", "").lower() for c in found_cities)]
 
 
 def format_events_for_ai(events: list) -> str:
-    """Converts event list into a readable string for AI context."""
-    lines = [] #empty list to store formatted event strings
-	# Keywords used to detect child-friendly events in the title
-    child_keywords = ["kind", "familie", "child", "baby", "jugend"]
-    for item in events:
-        title = item.get("title", "No Title")
-        date = item.get("date", "Unknown Date")
-        loc = item.get("location", "Unknown Location")
+	lines = []
+	child_keywords = ["kind", "familie", "child", "baby", "jugend"]
+	for item in events:
+		title = item.get("title", "No Title")
+		date = item.get("date", "Unknown Date")
+		loc = item.get("location", "Unknown Location")
+		desc = item.get("description", "No description available")
+		short_desc = (desc[:150] + '...') if len(desc) > 150 else desc
+		is_free = "Yes" if item.get("is_free") else "No"
+		is_child = "Yes" if any(word in title.lower() for word in
+								child_keywords) else "No"
 
-		# Extract description or use fallback if missing
-        desc = item.get("description", "No description available")
-
-		# Truncate description to 150 chars to save AI tokens
-        short_desc = (desc[:150] + '...') if len(desc) > 150 else desc
-
-		# Convert 'is_free' boolean into a readable 'Yes' or 'No'
-        is_free = "Yes" if item.get("is_free") else "No"
-
-		# Check if any keyword exists in title for child-friendliness
-        is_child = "Yes" if any(word in title.lower()
-                                for word in child_keywords) else "No"
-
-		# Build formatted string and append to the list
-        lines.append(
-            f"- {title} | Date: {date} | Location: {loc} | "
-            f"Free: {is_free} | Kids: {is_child} | Info: {short_desc}"
-        )
-	# Combine all lines into a single string separated by newlines
-    return "\n".join(lines)
+		lines.append(
+			f"- {title} | Date: {date} | Location: {loc} | Free: {is_free} | Kids: {is_child} | Info: {short_desc}")
+	return "\n".join(lines)

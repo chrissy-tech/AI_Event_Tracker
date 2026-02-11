@@ -1,0 +1,90 @@
+[
+    {
+        "title": "Tag der offenen Tür in der Kita \"Heideknirpse\" in Schlaitz",
+        "date": "27.02.2026",
+        "location": "Schlaitz",
+        "is_free": true,
+        "description": "Einladung zum Tag der offenen Tür in der Kita, um die Einrichtung kennenzulernen.",
+        "error": false
+    },
+    {
+        "title": "Erfassung der Avifauna in der Fuhneaue",
+        "date": "14.02.2026",
+        "location": "Bahnhof",
+        "is_free": false,
+        "description": "Beobachtung und Erfassung heimischer Vögel im Winter",
+        "error": false
+    },
+    {
+        "title": "Filmclub vom Festival Osten",
+        "date": "16.02.2026",
+        "location": "Kreismuseum",
+        "is_free": false,
+        "description": "Filmclub vom Festival Osten",
+        "error": false
+    },
+    {
+        "title": "Monatliche Vortragsreihe",
+        "date": "18.02.2026",
+        "location": "Kreismuseum Bitterfeld",
+        "is_free": false,
+        "description": "Monatliche Vortragsreihe \"Bau und Betrieb von Kavernen in Salz – Energiespeicher und Rohstoffgewinnung im geologischen Untergrund\"",
+        "error": false
+    },
+    {
+        "title": "Kreativ mit Gudrun",
+        "date": "19.02.2026",
+        "location": "MehrGenerationenhaus BiWoRegio eV.",
+        "is_free": false,
+        "description": "Aus feinem, farbigem Garn und Holzspießen entstehen gewebte Mandalas oder auch Traumfänger...",
+        "error": false
+    },
+    {
+        "title": "Liebesträume – Konzert zum Valentinstag",
+        "date": "19.02.2026",
+        "location": "Musik-Galerie an der Goitzsche",
+        "is_free": false,
+        "description": "Galertie-Konzert mit Maximilian Szadziul",
+        "error": false
+    },
+    {
+        "title": "Rathausführung zum Weltgästeführertag",
+        "date": "20.02.2026",
+        "location": "Historisches Rathaus",
+        "is_free": false,
+        "description": "Entdecken Sie die Geschichte des Historischen Rathauses in Bitterfeld",
+        "error": false
+    },
+    {
+        "title": "Lesung \"Wie Sascha seinen Vater fand\"",
+        "date": "20.02.2026",
+        "location": "Musik-Galerie an der Goitzsche",
+        "is_free": false,
+        "description": "Buchpremiere mit Michael-Alexander Lauter",
+        "error": false
+    },
+    {
+        "title": "Öffentliche Stadtführung zum Weltgästeführertag",
+        "date": "22.02.2026",
+        "location": "Vorplatz der Stadt- und Tourismusinformation",
+        "is_free": false,
+        "description": "Stadtführung mit Besichtigung der evangelischen Stadtkirche in Bitterfeld",
+        "error": false
+    },
+    {
+        "title": "GO TRABI GO",
+        "date": "13.02.2026",
+        "location": "KLEINE KOMÖDIE",
+        "is_free": false,
+        "description": "Theatereröffnung in Reuden an der Fuhne",
+        "error": false
+    },
+    {
+        "title": "GO TRABI GO",
+        "date": "14.02.2026",
+        "location": "KLEINE KOMÖDIE",
+        "is_free": false,
+        "description": "Theatereröffnung in Reuden an der Fuhne",
+        "error": false
+    }
+]
