@@ -129,14 +129,17 @@ async def search_events(query: EventQuery):
 			{
 				"role": "system",
 				"content": (
-					"You are a professional event assistant. "
-					"Present the provided events clearly using this format:\n\n"
-					"Titel: [Name]\n"
-					"Datum: [Date]\n"
-					"Location: [Location]\n"
-					"Info: [Short Summary]\n\n"
-					"STRICTLY answer in the same language as the user's query."
-				)
+					f"Today is {datetime.now().strftime('%d.%m.%Y')}. "
+                	"You are an event assistant. The Python filter has already selected the "
+                	"appropriate events for the user's request. Accept the provided events "
+                	"as correct for the requested timeframe.\n\n"
+                	"Present the events in this format:\n"
+                	"**Title**: [Name]\n"
+                	"**Date**: [Date]\n"
+                	"**Location**: [Location]\n"
+               	 	"**Info**: [Summary]\n\n"
+               	 	"Always respond in the same language the user used."
+             )
 			},
 			{
 				"role": "user",
@@ -194,20 +197,25 @@ def filter_by_date(event_list: list, user_search_query: str) -> list:
 	next_sun = next_sat + timedelta(days=1)
 
 	ranges = {
+		# 1. Spezifische Zeiträume zuerst (Wichtig für die Erkennung!)
+		("nächstes wochenende", "next weekend"): (next_sat, next_sun),
+		("nächste woche", "next week"): (
+			today + timedelta(days=(7 - today.weekday())),
+			today + timedelta(days=(13 - today.weekday()))
+		),
+
+		# 2. Aktuelle/Allgemeine Zeiträume
+		("dieses wochenende", "wochenende", "weekend"): (this_sat,
+														 this_sun),
+		("diese woche", "this week"): (today, today + timedelta(
+			days=(6 - today.weekday()))),
 		("heute", "today"): (today, today),
 		("morgen", "tomorrow"): (today + timedelta(1),
 								 today + timedelta(1)),
-		("wochenende", "weekend", "dieses wochenende"): (this_sat,
-														 this_sun),
-		("nächstes wochenende", "next weekend"): (next_sat, next_sun),
-		("diese woche", "this week"): (today, today + timedelta(
-			days=(6 - today.weekday()))),
-		("nächste woche", "next week"): (
-			today + timedelta(days=(7 - today.weekday())),
-			today + timedelta(days=(13 - today.weekday()))),
-		("dieses monat", "this month"): (today.replace(day=1), mon_next),
+		("dieses monat", "dieser monat", "this month"): (
+			today.replace(day=1), mon_next),
 
-		# --- Monate (Beispielhaft für das Frühjahr 2026) ---
+	# --- Monate (Beispielhaft für das Frühjahr 2026) ---
 		("februar", "february"): (datetime(2026, 2, 1).date(),
 								  datetime(2026, 2, 28).date()),
 		("märz", "march"): (datetime(2026, 3, 1).date(),

@@ -28,19 +28,14 @@ async def crawl_website(url: str, user_query: str) -> List[dict]:
     today_str = datetime.now().strftime("%d.%m.%Y")
     # 1. AI Strategy Setup
     extraction_instruction = (
-        f"CRITICAL TASK: Extract ONLY events matching: '{user_query}'."
-    	f"Today is {datetime.now().strftime('%d.%m.%Y')}."
-    	"Follow these date definitions strictly:\n"
-    	"- 'today': only events on this exact date.\n"
-    	"- 'this weekend': only events on the upcoming Saturday and Sunday.\n"
-    	"- 'next weekend': only events on the Saturday/Sunday of the following week.\n"
-    	"If an event date is outside the requested range, DISCARD IT."
-		"Only extract events where a specific date is clearly visible."
-		"DO NOT change the date to match the user's search query."
-		"If an event is on the 19.02., the date field MUST be '19.02.2026'."
-		"If you are unsure about the date, skip the event."
-		"Format the date strictly as DD.MM.YYYY. "
-    	"Provide title, date (DD.MM.YYYY), location, is_free, and a short description."
+    	f"Today is {datetime.now().strftime('%d.%m.%Y')}. "
+        "Your ONLY task is to extract event data from the website. "
+        "RULES:\n"
+        "1. EXTRACT ALL visible events you can find on the page, regardless of the date.\n"
+        "2. DATE INTEGRITY: Use the EXACT date shown on the site. If it says '14.02.', format it as '14.02.2026'.\n"
+        "3. NO HALLUCINATIONS: Do not change dates to match the user's current search interest.\n"
+        "4. FORMAT: Strictly use DD.MM.YYYY for dates.\n\n"
+        "OUTPUT: Provide title, date, location, is_free (bool), and description for EVERY event found."
     )
     strategy = LLMExtractionStrategy(
         llm_config=LLMConfig(
